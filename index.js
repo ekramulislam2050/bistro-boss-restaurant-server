@@ -32,6 +32,7 @@ async function run() {
         const db = client.db("resturantDB")
         const menuCollection = db.collection("menu")
         const reviewCollection = db.collection("reviews")
+        const cartCollection = db.collection("carts")
 
 
         app.get("/menus", async (req, res) => {
@@ -43,6 +44,13 @@ async function run() {
            const result = await reviewCollection.find({}).toArray()
            res.send(result)
         })
+
+        // cart related api-------------------
+           app.post("/carts",async(req,res)=>{
+              const cartItem = req.body
+              const result =await cartCollection.insertOne(cartItem)
+              res.send(result)
+           })
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
         // Send a ping to confirm a successful connection
