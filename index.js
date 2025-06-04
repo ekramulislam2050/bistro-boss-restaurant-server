@@ -3,11 +3,14 @@ const express = require('express')
 const app = express()
 const cors = require("cors")
 const jwt = require("jsonwebtoken")
+const stripe = require("stripe")(process.env.PAYMENT_SECRETE_KEY);
+
 const port = process.env.PORT || 5000
 const { MongoClient, ServerApiVersion, ObjectId, Admin } = require('mongodb');
 
 // middleware---------
 app.use(cors())
+app.use(express.static("public"))
 app.use(express.json())
 
 
@@ -55,7 +58,7 @@ async function run() {
 
         }
         //  verifyAdmin---------
-       const verifyAdmin = async (req, res, next) => {
+        const verifyAdmin = async (req, res, next) => {
             try {
                 const email = req.decoded.email;
                 const query = { email: email };
@@ -72,8 +75,37 @@ async function run() {
             }
         };
 
-
+        // payment calculate----------
+        //    const calculateOrderAmount=(item)=>{
+        //       let total= 0;
+        //       item.forEach(item => {
+        //          total += item.amount
+        //       }); 
+        //       return total
+        //    }
+          
         // ------------------------
+
+        //   Payment related api-----------
+
+        app.post("/create-payment-intent", async (req,res)=>{
+            // const {item}=req.body
+            const {price}=req.body
+
+            const paymentIntent= await stripe.paymentIntents.create({
+                // amount:calculateOrderAmount(item),
+                // currency:"usd",
+                // automatic_payment_methods:{
+                //     enabled:true,
+                // },
+                amount:parseInt(price * 100),
+                currency:"usd",
+                payment_method_types:['card']
+            })
+            res.send({
+                clientSecret:paymentIntent.client_secret
+            })
+        })
 
         // menu related api--------------
         app.get("/menus", async (req, res) => {
@@ -81,43 +113,43 @@ async function run() {
             const result = await menuCollection.find({}).toArray()
             res.send(result)
         })
-        app.post("/menu", verifyToken, verifyAdmin, async(req,res)=>{
-            const item=req.body
-            const result=await menuCollection.insertOne(item)
+        app.post("/menu", verifyToken, verifyAdmin, async (req, res) => {
+            const item = req.body
+            const result = await menuCollection.insertOne(item)
             res.send(result)
         })
 
-        app.delete("/menus/:id",verifyToken,verifyAdmin,async (req,res)=>{
-             const id = req.params.id
-             console.log("itemId=>",id)
-             const query={_id:id}
-             const result=await menuCollection.deleteOne(query)
-                 console.log("Delete result=>", result)
-             res.send(result)
+        app.delete("/menus/:id", verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id
+            console.log("itemId=>", id)
+            const query = { _id: id }
+            const result = await menuCollection.deleteOne(query)
+            console.log("Delete result=>", result)
+            res.send(result)
         })
 
-        app.get("/menu/:id",async (req,res)=>{
+        app.get("/menu/:id", async (req, res) => {
             const id = req.params.id
-            const query={_id:id}
+            const query = { _id: id }
             const result = await menuCollection.find(query).toArray()
             res.send(result)
         })
 
-        app.patch("/menu/:id", async (req,res)=>{
-                 const item = req.body
-                 const id = req.params.id
-                 const filter={_id:id}
-                 const updatedDoc={
-                    $set:{
-                        name:item.name,
-                        category:item.category,
-                        price:item.price,
-                        recipe:item.recipe,
-                        image:item.image
-                    }
-                 }
-                 const result = await menuCollection.updateOne(filter,updatedDoc)
-                 res.send(result)
+        app.patch("/menu/:id", async (req, res) => {
+            const item = req.body
+            const id = req.params.id
+            const filter = { _id: id }
+            const updatedDoc = {
+                $set: {
+                    name: item.name,
+                    category: item.category,
+                    price: item.price,
+                    recipe: item.recipe,
+                    image: item.image
+                }
+            }
+            const result = await menuCollection.updateOne(filter, updatedDoc)
+            res.send(result)
         })
 
         app.get("/reviews", async (req, res) => {
@@ -164,10 +196,10 @@ async function run() {
 
 
         //  query for admin--------
-        app.get("/users/admin/:email", verifyToken,async (req, res) => {
+        app.get("/users/admin/:email", verifyToken, async (req, res) => {
             const email = req.params.email
             if (email !== req.decoded.email) {
-               return res.status(403).send({ message: "forbidden access" })
+                return res.status(403).send({ message: "forbidden access" })
             }
             const query = { email: email }
             const result = await userCollection.findOne(query)
