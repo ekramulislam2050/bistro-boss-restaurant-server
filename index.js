@@ -41,6 +41,7 @@ async function run() {
         const reviewCollection = db.collection("reviews")
         const cartCollection = db.collection("carts")
         const userCollection = db.collection("users")
+        const paymentCollection = db.collection("payment")
         // ---------------------
         // verify token---------
         const verifyToken = (req, res, next) => {
@@ -83,28 +84,48 @@ async function run() {
         //       }); 
         //       return total
         //    }
-          
+
         // ------------------------
 
         //   Payment related api-----------
 
-        app.post("/create-payment-intent", async (req,res)=>{
+        app.post("/create-payment-intent", async (req, res) => {
             // const {item}=req.body
-            const {price}=req.body
+            const { price } = req.body
 
-            const paymentIntent= await stripe.paymentIntents.create({
+            const paymentIntent = await stripe.paymentIntents.create({
                 // amount:calculateOrderAmount(item),
                 // currency:"usd",
                 // automatic_payment_methods:{
                 //     enabled:true,
                 // },
-                amount:parseInt(price * 100),
-                currency:"usd",
-                payment_method_types:['card']
+                amount: parseInt(price * 100),
+                currency: "usd",
+                payment_method_types: ['card']
             })
             res.send({
-                clientSecret:paymentIntent.client_secret
+                clientSecret: paymentIntent.client_secret
             })
+        })
+
+        app.get("/payment/:email", verifyToken, async (req, res) => {
+            const query = { email: req.params.email }
+            if (req.params.email !== req.decoded.email) {
+                return res.status(403).send({ message: "forbidden access" })
+            }
+            const result = await paymentCollection.find(query).toArray()
+            res.send(result)
+        })
+
+        app.post("/payment", async (req, res) => {
+            const payment = req.body
+            const paymentResult = await paymentCollection.insertOne(payment)
+            console.log(payment)
+            //  delete paid items from cart-----------
+            const deleteResult = await cartCollection.deleteMany({
+                _id: { $in: payment.cartIds.map(cartId => new ObjectId(cartId)) }
+            })
+            res.send({ deleteResult, paymentResult })
         })
 
         // menu related api--------------
@@ -196,6 +217,67 @@ async function run() {
 
 
         //  query for admin--------
+        app.get("/order-state", async (req, res) => {
+            const result = await paymentCollection.aggregate([
+                {
+                    $unwind: "$itemIds"
+                },
+                {
+                    $lookup: {
+                        from: "menu",
+                        localField: "itemIds",
+                        foreignField: "_id",
+                        as: "menuItem"
+                    }
+                },
+                {
+                    $unwind: "$menuItem"
+
+                },
+                {
+                    $group: {
+                        _id: "$menuItem.category",
+                        quantity: { $sum: 1 },
+                        revenue: { $sum: "$menuItem.price" }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        category: "$_id",
+                        quantity: "$quantity",
+                        revenue: "$revenue"
+                    }
+                }
+
+
+            ]).toArray()
+            res.send(result)
+        })
+
+        app.get("/admin-state",  verifyToken, verifyAdmin,async (req, res) => {
+            const menuItem = await menuCollection.estimatedDocumentCount()
+            const users = await userCollection.estimatedDocumentCount()
+            const orders = await paymentCollection.estimatedDocumentCount()
+
+            const result = await paymentCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalRevenue: {
+                            $sum: '$price'
+                        }
+                    }
+                }
+            ]).toArray()
+            const resultOfRevenue = result.length > 0 ? result[0].totalRevenue : 0
+            res.send({
+                menuItem,
+                users,
+                orders,
+                resultOfRevenue
+            })
+        })
         app.get("/users/admin/:email", verifyToken, async (req, res) => {
             const email = req.params.email
             if (email !== req.decoded.email) {
