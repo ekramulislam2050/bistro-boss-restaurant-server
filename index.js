@@ -4,9 +4,13 @@ const app = express()
 const cors = require("cors")
 const jwt = require("jsonwebtoken")
 const stripe = require("stripe")(process.env.PAYMENT_SECRETE_KEY);
+// sslCommerz--------------
+const SSLCommerzPayment = require('sslcommerz-lts')
+
 
 const port = process.env.PORT || 5000
-const { MongoClient, ServerApiVersion, ObjectId} = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { mailgunConfirmation } = require('./mailgun')
 
 // middleware---------
 app.use(cors())
@@ -15,7 +19,10 @@ app.use(express.json())
 
 
 
-
+// ssl commerz----------
+const store_id =process.env.sslCommerz_store_id
+const store_passwd =process.env.sslCommerz_store_pass
+const is_live = false //true for live, false for sandbox
 
 
 
@@ -119,12 +126,18 @@ async function run() {
 
         app.post("/payment", async (req, res) => {
             const payment = req.body
+            console.log("payment=",payment)
             const paymentResult = await paymentCollection.insertOne(payment)
-            console.log(payment)
+            
             //  delete paid items from cart-----------
             const deleteResult = await cartCollection.deleteMany({
                 _id: { $in: payment.cartIds.map(cartId => new ObjectId(cartId)) }
             })
+
+            // mailgun confirmation msg------
+            mailgunConfirmation(payment)
+
+
             res.send({ deleteResult, paymentResult })
         })
 
@@ -255,7 +268,7 @@ async function run() {
             res.send(result)
         })
 
-        app.get("/admin-state",  verifyToken, verifyAdmin,async (req, res) => {
+        app.get("/admin-state", verifyToken, verifyAdmin, async (req, res) => {
             const menuItem = await menuCollection.estimatedDocumentCount()
             const users = await userCollection.estimatedDocumentCount()
             const orders = await paymentCollection.estimatedDocumentCount()
@@ -323,7 +336,7 @@ async function run() {
 
 
         // Connect the client to the server	(optional starting in v4.7)
-        // await client.connect();
+        await client.connect();
         // Send a ping to confirm a successful connection
         // await client.db("admin").command({ ping: 1 });
         // console.log("Pinged your deployment. You successfully connected to MongoDB!");
