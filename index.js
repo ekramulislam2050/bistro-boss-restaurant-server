@@ -4,13 +4,10 @@ const app = express()
 const cors = require("cors")
 const jwt = require("jsonwebtoken")
 const stripe = require("stripe")(process.env.PAYMENT_SECRETE_KEY);
-// sslCommerz--------------
-const SSLCommerzPayment = require('sslcommerz-lts')
-
-
-const port = process.env.PORT || 5000
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { mailgunConfirmation } = require('./mailgun')
+const { SSLCommerzConfirmation } = require('./sslCommerz')
+ const port = process.env.PORT || 5000
 
 // middleware---------
 app.use(cors())
@@ -19,10 +16,6 @@ app.use(express.json())
 
 
 
-// ssl commerz----------
-const store_id =process.env.sslCommerz_store_id
-const store_passwd =process.env.sslCommerz_store_pass
-const is_live = false //true for live, false for sandbox
 
 
 
@@ -137,8 +130,10 @@ async function run() {
             // mailgun confirmation msg------
             mailgunConfirmation(payment)
 
+            // ssl commerz------------
+              const GatewayPageURL= await SSLCommerzConfirmation(payment)
 
-            res.send({ deleteResult, paymentResult })
+            res.send({ deleteResult, paymentResult,url:GatewayPageURL })
         })
 
         // menu related api--------------
