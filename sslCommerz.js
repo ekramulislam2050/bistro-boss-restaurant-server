@@ -3,26 +3,27 @@ const SSLCommerzPayment = require('sslcommerz-lts')
 
 
 // ssl commerz----------
-const store_id = process.env.sslCommerz_store_id
-const store_passwd = process.env.sslCommerz_store_pass
+const store_id =process.env.sslCommerz_store_id
+const store_passwd =process.env.sslCommerz_store_pass
 const is_live = false //true for live, false for sandbox
 
-const SSLCommerzConfirmation = async (payment) => {
+const SSLCommerzConfirmation = async (sslPayment,tran_id ) => {
+     
     try {
         const data = {
-            total_amount: payment.price,
-            currency: 'BDT',
-            tran_id: payment.transaction, // use unique tran_id for each api call
-            success_url: 'http://localhost:3030/success',
-            fail_url: 'http://localhost:3030/fail',
+            total_amount: sslPayment.price,
+            currency:"BDT",
+            tran_id: tran_id, // use unique tran_id for each api call
+            success_url:`http://localhost:5000/sslPayment/success/${tran_id}`,
+            fail_url: `http://localhost:5000/sslPayment/fail/${tran_id}`,
             cancel_url: 'http://localhost:3030/cancel',
             ipn_url: 'http://localhost:3030/ipn',
             shipping_method: 'Courier',
             product_name: 'Computer.',
             product_category: 'Electronic',
             product_profile: 'general',
-            cus_name: 'Customer Name',
-            cus_email: 'customer@example.com',
+            cus_name:sslPayment.userName,
+            cus_email:sslPayment.email,
             cus_add1: 'Dhaka',
             cus_add2: 'Dhaka',
             cus_city: 'Dhaka',
@@ -39,16 +40,21 @@ const SSLCommerzConfirmation = async (payment) => {
             ship_postcode: 1000,
             ship_country: 'Bangladesh',
         };
+        
         // console.log(data)
         const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live)
         const apiResponse = await sslcz.init(data)
+        console.log("apiresponse=",apiResponse)
         const GatewayPageURL = apiResponse.GatewayPageURL
         console.log('Redirecting to: ', GatewayPageURL)
+        
         return GatewayPageURL
+        
 
     } catch (err) {
 
     }
+    
 }
 
 module.exports = { SSLCommerzConfirmation }

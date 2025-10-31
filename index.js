@@ -7,7 +7,7 @@ const stripe = require("stripe")(process.env.PAYMENT_SECRETE_KEY);
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { mailgunConfirmation } = require('./mailgun')
 const { SSLCommerzConfirmation } = require('./sslCommerz')
- const port = process.env.PORT || 5000
+const port = process.env.PORT || 5000
 
 // middleware---------
 app.use(cors())
@@ -42,6 +42,7 @@ async function run() {
         const cartCollection = db.collection("carts")
         const userCollection = db.collection("users")
         const paymentCollection = db.collection("payment")
+        const sslPaymentCollection = db.collection("sslCommerzPayment")
         // ---------------------
         // verify token---------
         const verifyToken = (req, res, next) => {
@@ -116,12 +117,13 @@ async function run() {
             const result = await paymentCollection.find(query).toArray()
             res.send(result)
         })
-
+        // stripe payment--------------
         app.post("/payment", async (req, res) => {
+
             const payment = req.body
-            console.log("payment=",payment)
+            console.log("payment=", payment)
             const paymentResult = await paymentCollection.insertOne(payment)
-            
+
             //  delete paid items from cart-----------
             const deleteResult = await cartCollection.deleteMany({
                 _id: { $in: payment.cartIds.map(cartId => new ObjectId(cartId)) }
@@ -130,10 +132,48 @@ async function run() {
             // mailgun confirmation msg------
             mailgunConfirmation(payment)
 
-            // ssl commerz------------
-              const GatewayPageURL= await SSLCommerzConfirmation(payment)
 
-            res.send({ deleteResult, paymentResult,url:GatewayPageURL })
+
+            res.send({ deleteResult, paymentResult })
+        })
+
+        // sslcommerz payment-------------
+        app.post("/sslPayment", async (req, res) => {
+            const tran_id = new ObjectId().toString()
+            const sslPayment = req.body
+
+            // tran_id and status push in sslPayment------------
+              sslPayment.tran_id=tran_id
+              sslPayment.status=false
+              const result= await sslPaymentCollection.insertOne(sslPayment)
+            // ssl commerz------------
+            const GatewayPageURL = await SSLCommerzConfirmation(sslPayment, tran_id )
+            res.send({result, url: GatewayPageURL })
+        })
+
+        // sslCommerz payment success:tranId
+        app.post("/sslPayment/success/:tran_id", async (req, res) => {
+             console.log(req.params.tran_id)
+             const tran_id=req.params.tran_id
+             const filter={tran_id:tran_id}
+             const updatedDoc={
+                $set:{
+                    status:true
+                }
+             }
+             const result = await sslPaymentCollection.updateOne(filter,updatedDoc)
+             if(result.modifiedCount>0){
+                res.redirect(`http://localhost:5173/dashboard/sslPayment/success/${tran_id}`)
+             }
+        })
+
+        // sslcommerz payment fails---------
+        app.post("/sslPayment/fail/:tran_id",async(req,res)=>{
+            const tran_id=req.params.tran_id
+              const result = await sslPaymentCollection.deleteOne({tran_id})
+              if(result.deletedCount){
+                res.redirect(`http://localhost:5173/dashboard/sslPayment/fail/${tran_id}`)
+              }
         })
 
         // menu related api--------------
