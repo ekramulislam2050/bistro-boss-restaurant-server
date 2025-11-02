@@ -52,7 +52,7 @@ const SSLCommerzConfirmation = async (sslPayment,tran_id ) => {
         
 
     } catch (err) {
-
+       console.log(err)
     }
     
 }
